@@ -1,0 +1,102 @@
+
+Pipex se trata de crear una tubería (comunicación) entre 2 procesos, se recibe un archivo, pasa por un proceso, el resultado para por un proceso2, y este genera un archivo2.
+
+Ejemplo de ejecución1:
+ ./pipex infile "ls -l" "wc -l" outfile
+ que emula la forma oficial en linux:
+  <infile ls -l | wc -l >outfile
+En linux ls es para listar los archivos, y wc para contar las lineas, palabras o #byte (-l, -w, -c respectivamente).
+
+Ejemplo de ejecución2:
+ ./pipex infile "grep a1" "wc -w" outfile
+“<infile grep a1 | wc -w >outfile
+donde grep coge todo lo que contenga los char "a1" y wc -w cuenta las palabras que quedan.
+
+--------------------------------------------
+
+Teoría:
+ssize_t		n_bytes
+int   		fd
+char 		buffer[10]
+fd = open("archivo", permisos);
+n_bytes = read(fd, buffer, #char a leer);
+close(fd);
+
+-funcion "fork()", se usa para que el proceso actual(main) cree 1 proceso hijo, el cual su PID (process id) sera su ID y el PPID (parent process id) sera su id padre el cual es el mismo que el id del main.
+Para llamar al PID se usa  "getpid()" y para el PPID se usa "pgetid()".
+fork() entonces da 2 INTEGER en el que 0 es el proceso hijo, el otro pidc mayor a 0 es el proceso main(padre), y si hay un pidc menor a 0 es que hay error. En vez de definir como int a la variable se define con pid_t.
+Si se finaliza el proceso padre y el proceso hijo sigue ejecutandose, se le asigna un nuevo PPID en automatico al proceso hijo.
+fork(void) usa el <unistd.h>
+Ambos procesos si no se pone un wait() se ejecutan al mismo tiempo.
+
+wait(int *westatus): wait recibe un entero, usa el #include <sys/wait.h>
+en este proyecto no es necesario ya que el read de su fd[0] del padre esperara hasta que se ejecute el write del hijo en su fd[1]
+
+pipe(int fd[2]), usa el #include <unistd.h>
+pipe crea la conexion entre los 2 fd, entre el fd[0](lectura) y fd[1](escritura).
+luego se crea un fork, en el que entonces habra 2 fd[0] y 2 fd[1], uno del padre y uno del hijo de cada uno.
+Entonces en el proceso del hijo el fd[1] se conectará al f[0] del padre.
+Debemos cerrar los fd no usados en cada proceso, en el hijo cerramos el fd[0] y en el padre el fd[1]
+
+STDIN_FILENO: Es la entrada estándar de un programa/archivo
+STDOUT_FILENO: Es la salida estándar de un programa/archivo
+
+int dup2(int a, int b), es para que lo que hay en "b" se escriba en "a".
+
+Entonces en el hijo:
+con un dup2 se escribe en fd[1] la salida de este proceso que es STDOUT_FILENO, 
+y con otro dup2 para redirigir la entrada estándar del proceso hijo desde el archivo de entrada "infile"
+*si bien infile = open() devuelve un descriptor de archivo que se puede utilizar para leer o escribir el archivo, no implica que su contenido ya se haya leído en la memoria, al usar dup2(infile, STDIN_FILENO) estamos asegurando que el archivo que abrimos con open() se utilice como la única entrada para el proceso hijo en lugar de la entrada estándar predeterminada (que normalmente sería el teclado o una tubería).
+Para garantizar que los datos se escriban en la tubería es necesario redirigir primero la salida estándar (STDOUT_FILENO) y luego (STDIN_FILENO), sino puede haber problemas de sincronización.
+Al terminar de usar el fd[1] en el proceso hijo hay que cerrarlo.
+usamos funcion creada exemy en el que se indica que de la ruta "path" aplique el comando "cmd" el entorno "env" que es el que viene por default.
+Notar que creamos funcion path2 en el que va probando cada ruta en el que el comando si exista, y cuando lo encuentre lo retorna.
+
+Entonces en el padre:
+Ejecutamos los procesos del hijo pero con la lógica invertida. 
+
+*******************************************
+
+BONUS:
+-Gestionar múltiples pipes:
+/pipex archivo1 comando1 comando2 comando3 ... comandon archivo2
+Deberá comportarse así:
+ < archivo1 comando1 | comando2 | comando3 ... | comandon > archivo2
+
+-cuando el primer parámetro es “here_doc”:
+./pipex here\_doc LIMITADOR comando comando1 archivo
+Deberá comportarse así:
+comando << LIMITADOR | comando1 >> archivo
+SIGNIFICA:
+Tome todas las entradas de texto hasta que encuentre los caracteres = LIMITADOR, y de este filtro se le aplique el comando1 y lo exporte al archivo.
+
+--------------------------------------------
+
+Teoría:
+
+O_APPEND: si file existe, los datos se agregan debajo de lo existente
+O_TRUNC: si file existe, los datos se sobrescriben en lo existente.
+0777 significa que se establecen los permisos de lectura, escritura y ejecución para el propietario, el grupo y otros usuarios. En otras palabras, cualquier usuario en el sistema puede leer, escribir y ejecutar este archivo. 
+
+=>Definimos que cuando el arg[1] sea "here_doc":
+-open el archivo con permisos (escribir, crear, AGREGAR) y NO existe el filein, se usará la entrada standard.
+-acepte solo 5 arg.
+-haga un fork().
+-en el proceso hijo cerramos el fd[0], 
+-usamos el get_next_line(&line) que tomara como datos de entrada el STDIN_FILENO que es lo que se ingresara como texto en la terminal; porque si bien se define el tipo de variable de "line" que es "char *" pero no se le asigna un valor, asi que por defecto toma la entrada standard, una vez tomado los datos standard, get_next_line hace que se guarde los valores en la variable "line".
+-
+
+
+
+
+
+Y los que no, que tenga persmisos de (escribir, crear, SOBREESCRIBIR), y definimos du2 con STDIN_FILENO.
+
+
+
+
+
+
+
+
+
